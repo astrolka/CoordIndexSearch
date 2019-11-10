@@ -1,15 +1,22 @@
 #include <stdlib.h>
 #include <string>
-#include <set>
+#include <vector>
+#include <map>
 
 using namespace std;
+
+struct term {
+    string &str;
+    unsigned docId;
+    unsigned pos;
+};
 
 class AVLTermNode {
 
 public:
     string term;
-    unsigned int count;
-    std::set<unsigned int> docIdSet;
+    unsigned count;
+    map<unsigned, vector<unsigned>> docIdMap;
 
     AVLTermNode *leftChild = nullptr;
     AVLTermNode *rightChild = nullptr;
@@ -32,9 +39,9 @@ public:
         return leftHeight() - rightHeight();
     }
 
-    AVLTermNode(string t, unsigned int docId) {
-        term = t;
-        docIdSet.insert(docId);
+    AVLTermNode(struct term t) {
+        term = t.str;
+        docIdMap[t.docId].push_back(t.pos);
         count = 1;
     }
 

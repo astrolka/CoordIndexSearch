@@ -86,7 +86,8 @@ public:
 
     template <class Int>
     void writeInt(Int a, int onBytes, size_t &at) {
-        position = at;
+        size_t temp = at;
+        position = temp;
 
         while (position + onBytes > totalSize)
             increaseSize();
@@ -104,11 +105,10 @@ public:
             usedBytes = position;
     }
 
-    template <class Collection, class ColIterator>
-    void writeCollection(const Collection &c, int clusterSize = 2) {
-        for (ColIterator it = c.begin(); it != c.end(); ++it) {
-            writeInt(*it, clusterSize);
-        }
+    template <class Arr>
+    void writeInts(const Arr &c, int clusterSize = 2) {
+        for (auto v : c)
+            writeInt(v, clusterSize);
     }
 
     // Read

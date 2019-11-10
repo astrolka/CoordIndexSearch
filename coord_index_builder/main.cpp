@@ -15,7 +15,7 @@ using namespace std;
 using namespace std::chrono;
 
 static size_t termCount = 0;
-void saveIndex(AVLTermNode *node, BinaryMmap &mainIndex, BinaryMmap &coordBlocks, size_t at = 0);
+void saveIndex(AVLTermNode *node, BinaryMmap &mainIndex, BinaryMmap &coordBlocks, BinaryMmap &coord, size_t at = 0);
 string &lowerCaseStr(string &str);
 
 int main() {
@@ -30,8 +30,10 @@ int main() {
 
     remove("reverseIndex.bin");
     remove("coordBlocks.bin");
+    remove("coord.bin");
     BinaryMmap mainIndex("reverseIndex.bin", 10000);
     BinaryMmap coordBlocks("coordBlocks.bin");
+    BinaryMmap coord("coord.bin");
 
     AVLTermTree indexTree;
 
@@ -54,21 +56,23 @@ int main() {
     int prevDocId = 0;
 
     while (tokens.currentPosition() < tokens.writtenBytes()) {
-        int docId = tokens.readInt(DOC_ID_C);
-        int termPerArticleCount = tokens.readInt(TERM_COUNT_C);
+        unsigned docId = tokens.readInt(DOC_ID_C);
+        unsigned termPerArticleCount = tokens.readInt(TERM_COUNT_C);
+        unsigned tokensToRead = termPerArticleCount;
 
-        while (termPerArticleCount) {
+        while (tokensToRead) {
             int tokenLen = tokens.readInt(TERM_SIZE_C);
             string_view token = tokens.readStr(tokenLen);
 
-            string term = regex_replace(string(token), graveRX, "");
-            lowerCaseStr(term);
+            string termStr = regex_replace(string(token), graveRX, "");
+            lowerCaseStr(termStr);
 
-            indexTree.insert(term, docId);
+            struct term term {termStr, docId, termPerArticleCount - tokensToRead};
+            indexTree.insert(term);
 
-            termLength = (termLength * (double)totalTermCount + (double)term.length()) / (double)(totalTermCount + 1);
+            termLength = (termLength * (double)totalTermCount + (double)termStr.length()) / (double)(totalTermCount + 1);
             totalTermCount++;
-            byteBuffer += term.length();
+            byteBuffer += termStr.length();
 
             if (byteBuffer >= 1024) {
                 high_resolution_clock::time_point now = high_resolution_clock::now();
@@ -78,7 +82,7 @@ int main() {
                 byteBuffer = 0;
             }
 
-            termPerArticleCount--;
+            tokensToRead--;
         }
 
         high_resolution_clock::time_point now = high_resolution_clock::now();
@@ -93,40 +97,45 @@ int main() {
     cout << "time per article in microseconds:\t" << articleIndexTime << endl;
     cout << "time per kb in microseconds:\t" << kbIndexTime << endl;
 
-    saveIndex(indexTree.root, mainIndex, coordBlocks);
+    saveIndex(indexTree.root, mainIndex, coordBlocks, coord);
 
     cout << "term count:\t" << termCount << "\tterm size:\t" << termLength << endl;
 
     tokens.terminate();
     mainIndex.terminate();
     coordBlocks.terminate();
+    coord.terminate();
 
     return 0;
 }
 
-void saveIndex(AVLTermNode *node, BinaryMmap &mainIndex, BinaryMmap &coordBlocks, size_t at) {
+void saveIndex(AVLTermNode *node, BinaryMmap &mainIndex, BinaryMmap &coordBlocks, BinaryMmap &coord, size_t at) {
     termCount++;
     size_t writePosition = at ?: mainIndex.currentPosition();
 
     mainIndex.writeInt(node->term.length(), TERM_SIZE_C, writePosition);
     mainIndex.writeStr(node->term);
-    mainIndex.writeInt(node->docIdSet.size(), DOC_COUNT_C);
+    mainIndex.writeInt(node->docIdMap.size(), DOC_COUNT_C);
     mainIndex.writeInt(node->count, TOTAL_COUNT_C);
     mainIndex.writeInt(coordBlocks.currentPosition(), COORD_BLOCKS_O_C);
 
     writePosition = mainIndex.currentPosition();
 
-    coordBlocks.writeCollection<set<unsigned int>, set<unsigned int>::iterator>(node->docIdSet);
+    for (auto const& [docId, pos] : node->docIdMap) {
+        coordBlocks.writeInt(docId, DOC_ID_C);
+        coordBlocks.writeInt(pos.size(), 2);
+        coordBlocks.writeInt(coord.currentPosition(), 4);
+        coord.writeInts(pos);
+    }
 
     if (node->leftChild != nullptr)
-        saveIndex(node->leftChild, mainIndex, coordBlocks, writePosition + RIGHT_O_C);
+        saveIndex(node->leftChild, mainIndex, coordBlocks, coord, writePosition + RIGHT_O_C);
 
     if (node->rightChild != nullptr) {
         size_t rightChildOffset = mainIndex.currentPosition() + RIGHT_O_C;
         mainIndex.writeInt(rightChildOffset, RIGHT_O_C, writePosition);
-        saveIndex(node->rightChild, mainIndex, coordBlocks, rightChildOffset);
+        saveIndex(node->rightChild, mainIndex, coordBlocks, coord, rightChildOffset);
     }
-
 }
 
 string &lowerCaseStr(string &str) {

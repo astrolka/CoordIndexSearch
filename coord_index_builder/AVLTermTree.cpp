@@ -9,32 +9,32 @@ public:
     AVLTermNode *root = nullptr;
     size_t nodesCount = 0;
 
-    void insert(string &term, unsigned int docId) {
+    void insert(term &term) {
         if (root == nullptr) {
-            root = new AVLTermNode(term, docId);
+            root = new AVLTermNode(term);
             nodesCount++;
             return;
         }
-        root = insert(root, term, docId);
+        root = insert(root, term);
     }
 
 private:
 
-    AVLTermNode *insert(AVLTermNode *node, string &term, unsigned int docId) {
+    AVLTermNode *insert(AVLTermNode *node, term &term) {
 
         if (node == nullptr) {
             nodesCount++;
-            return new AVLTermNode(term, docId);
+            return new AVLTermNode(term);
         }
 
-        if (term.compare(node->term) == 0) {
+        if (term.str.compare(node->term) == 0) {
             node->count++;
-            node->docIdSet.insert(docId);
+            node->docIdMap[term.docId].push_back(term.pos);
             return node;
-        } else if (term.compare(node->term) < 0) {
-            node->leftChild = insert(node->leftChild, term, docId);
+        } else if (term.str.compare(node->term) < 0) {
+            node->leftChild = insert(node->leftChild, term);
         } else {
-            node->rightChild = insert(node->rightChild, term, docId);
+            node->rightChild = insert(node->rightChild, term);
         }
 
         AVLTermNode *balancedNode = balanced(node);
